@@ -163,7 +163,7 @@ def draft_service_slots(state: SupervisorState) -> dict:
     prompt = (
         "여행 플래너가 제공할 수 있는 항목은 weather(날씨), hotel(호텔), flight(항공), restaurant(맛집) 네 가지입니다.\n"
         "대화만 보고 사용자에게 **필요해 보이는** 항목만 골라 JSON 배열로 출력하세요. "
-        "맛집이 필요 없다고 하면 restaurant는 넣지 마세요.\n"
+        "**예를 들어,** 맛집이 필요 없다고 하면 restaurant는 넣지 마세요.\n"
         '형식: {"proposed_slots": ["flight", "hotel", ...]}\n\n대화:\n' + conv
     )
     text = invoke_text(prompt)
@@ -273,6 +273,25 @@ _SUB_AGENTS = {
 }
 
 
+def _format_subagent_reply_for_user(slots: list[str], sub_results: dict[str, str]) -> str:
+    """Gradio 등 UI는 `messages`만 챗에 표시하므로, 서브 에이전트 결과를 assistant 발화로 만든다."""
+    labels = {"weather": "날씨", "hotel": "호텔", "flight": "항공", "restaurant": "맛집"}
+    lines: list[str] = []
+    for name in slots:
+        if name not in sub_results:
+            continue
+        text = (sub_results.get(name) or "").strip()
+        if not text:
+            continue
+        title = labels.get(name, name)
+        lines.append(f"[{title}]\n{text}")
+    if lines:
+        return "요청하신 정보입니다.\n\n" + "\n\n".join(lines)
+    if slots:
+        return "선택하신 서비스를 처리했지만, 표시할 결과 문구가 없습니다. (서브 에이전트 `result` 확인)"
+    return "호출된 서비스가 없습니다."
+
+
 def invoke_subagents(state: SupervisorState) -> dict:
     slots = state.get("slots") or []
     slot_values = state.get("slot_values") or {}
@@ -283,7 +302,18 @@ def invoke_subagents(state: SupervisorState) -> dict:
             graph = _SUB_AGENTS[name]()
             out = graph.invoke({"query": query})
             sub_results[name] = out.get("result", "")
-    return {"sub_results": sub_results, "current_phase": "completed"}
+    messages = list(state.get("messages") or [])
+    messages.append(
+        {
+            "role": "assistant",
+            "content": _format_subagent_reply_for_user(slots, sub_results),
+        }
+    )
+    return {
+        "sub_results": sub_results,
+        "current_phase": "completed",
+        "messages": messages,
+    }
 
 
 def _build_graph() -> StateGraph:
