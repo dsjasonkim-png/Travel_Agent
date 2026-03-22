@@ -1,85 +1,121 @@
 """Gradio 챗봇 UI: 여행 에이전트와 대화하고 결과를 확인합니다."""
 
+from __future__ import annotations
+
 import json
+from typing import Any
 
 import gradio as gr
 
-import travel_agent.config  # noqa: F401 — .env 로드
-from travel_agent.service import run_agent_raw
+from travel_agent.config import configure_logging
+from travel_agent.service import run_agent_turn
+
+configure_logging()
 
 
-def run_agent(user_message: str) -> tuple[list[tuple[str | None, str | None]], str]:
-    """사용자 메시지로 에이전트를 실행하고, UI용 채팅 히스토리·상태 요약 반환."""
-    if not (user_message or "").strip():
-        return [(None, "메시지를 입력해 주세요.")], ""
+def _chat_messages_from_result(result: dict[str, Any]) -> list[dict[str, str]]:
+    """체크포인트 상태 messages + interrupt 안내 문구를 Gradio Chatbot 형식으로."""
+    out: list[dict[str, str]] = []
+    for m in result.get("messages") or []:
+        role = m.get("role", "")
+        content = (m.get("content") or "").strip()
+        if role in ("user", "assistant") and content:
+            out.append({"role": role, "content": content})
+    for intr in result.get("__interrupt__") or []:
+        val = getattr(intr, "value", intr)
+        if isinstance(val, dict):
+            msg = (val.get("message") or "").strip()
+            if msg:
+                out.append({"role": "assistant", "content": msg})
+    return out
 
-    result = run_agent_raw(user_message.strip())
 
-    # 채팅: 사용자 메시지 + 어시스턴트 첫 응답
-    messages = result.get("messages") or []
-    chat_history: list[tuple[str | None, str | None]] = []
-    for m in messages:
-        role, content = m.get("role", ""), m.get("content", "")
-        if role == "user":
-            chat_history.append((content, None))
-        elif role == "assistant" and content:
-            if chat_history and chat_history[-1][1] is None:
-                chat_history[-1] = (chat_history[-1][0], content)
-            else:
-                chat_history.append((None, content))
-
-    # 상태 요약 (테스트용)
-    summary_lines = [
-        "**Slots:** " + ", ".join(result.get("slots") or []),
-        "**Phase:** " + str(result.get("current_phase", "")),
-        "",
-        "**Slot values:**",
-        "```json\n" + json.dumps(result.get("slot_values") or {}, ensure_ascii=False, indent=2) + "\n```",
-        "",
-        "**Sub results:**",
-    ]
+def _summary_markdown(result: dict[str, Any]) -> str:
+    lines = []
+    if result.get("__interrupt__"):
+        lines.append("**상태:** 사용자 입력 대기 (Human-in-the-loop)")
+        for intr in result["__interrupt__"]:
+            val = getattr(intr, "value", intr)
+            if isinstance(val, dict) and val.get("stage"):
+                lines.append(f"- **단계:** `{val['stage']}`")
+    else:
+        lines.append("**상태:** 실행 완료")
+    lines.append("")
+    lines.append("**Slots:** " + ", ".join(result.get("slots") or []))
+    if result.get("proposed_slots"):
+        lines.append("**제안(slots 확정 전):** " + ", ".join(result["proposed_slots"]))
+    lines.append("**Phase:** " + str(result.get("current_phase", "")))
+    lines.append("")
+    lines.append("**Slot values:**")
+    lines.append(
+        "```json\n"
+        + json.dumps(result.get("slot_values") or {}, ensure_ascii=False, indent=2)
+        + "\n```"
+    )
+    lines.append("")
+    lines.append("**Sub results:**")
     for name, value in (result.get("sub_results") or {}).items():
-        summary_lines.append(f"- **{name}:** {value}")
-    summary = "\n".join(summary_lines)
-
-    return chat_history, summary
+        lines.append(f"- **{name}:** {value}")
+    return "\n".join(lines)
 
 
 def build_ui() -> gr.Blocks:
-    """Gradio 블록 UI 구성."""
     with gr.Blocks() as demo:
         gr.Markdown("# 여행 에이전트 테스트")
-        gr.Markdown("여행 목적을 입력하면 슬롯 결정·서브 에이전트 결과를 확인할 수 있습니다.")
+        gr.Markdown(
+            "여행 목적을 입력하면 **여행지 확인 → 필요 서비스 확인(HITL)** 후 서브 에이전트가 호출됩니다. "
+            "중간에 질문이 나오면 답한 뒤 다시 **Enter**로 보내 주세요."
+        )
+
+        thread_id_state = gr.State(value=None)
+        waiting_resume_state = gr.State(value=False)
 
         with gr.Row():
             with gr.Column(scale=2):
-                chatbot = gr.Chatbot(label="대화", height=400)
+                chatbot = gr.Chatbot(label="대화", height=420)
                 msg = gr.Textbox(
                     label="메시지",
-                    placeholder="예: 서울로 4월에 여행 갈 거예요. 맛집은 필요 없어요.",
-                    lines=2,
+                    placeholder="첫 메시지 또는 HITL 답변을 입력… (Enter로 전송)",
+                    lines=1,
+                    autofocus=True,
                 )
                 submit_btn = gr.Button("실행")
 
             with gr.Column(scale=1):
                 state_summary = gr.Markdown(
                     label="결과 요약",
-                    value="실행 후 슬롯·서브 에이전트 결과가 여기 표시됩니다.",
+                    value="실행 후 슬롯·상태가 여기 표시됩니다.",
                 )
 
-        def submit(user_input: str):
-            chat_history, summary = run_agent(user_input)
-            return chat_history, summary
+        def submit(
+            user_input: str,
+            thread_id: str | None,
+            waiting_resume: bool,
+            chat_hist: list,
+            summary_md: str,
+        ):
+            if not (user_input or "").strip():
+                return chat_hist, summary_md, "", thread_id, waiting_resume
 
-        msg.submit(submit, inputs=[msg], outputs=[chatbot, state_summary])
-        submit_btn.click(submit, inputs=[msg], outputs=[chatbot, state_summary])
+            if waiting_resume:
+                result, tid, needs = run_agent_turn(thread_id, user_input, is_resume=True)
+            else:
+                result, tid, needs = run_agent_turn(None, user_input, is_resume=False)
 
-        gr.Markdown("---\n*의도분류·대화에는 `.env`의 `OPENAI_MODEL`(기본 gpt-5-nano)이 사용됩니다.*")
+            chat = _chat_messages_from_result(result)
+            summary = _summary_markdown(result)
+            return chat, summary, "", tid, needs
+
+        io = [msg, thread_id_state, waiting_resume_state, chatbot, state_summary]
+        outputs = [chatbot, state_summary, msg, thread_id_state, waiting_resume_state]
+        msg.submit(submit, inputs=io, outputs=outputs)
+        submit_btn.click(submit, inputs=io, outputs=outputs)
+
+        gr.Markdown("---\n*`.env`의 `OPENAI_MODEL`(기본 gpt-4o-mini)이 사용됩니다.*")
     return demo
 
 
 def main() -> None:
-    """Gradio 앱 실행."""
     demo = build_ui()
     demo.launch()
 

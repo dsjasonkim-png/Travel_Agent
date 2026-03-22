@@ -6,27 +6,28 @@ from typing import TypedDict
 SlotType = str  # "weather" | "hotel" | "flight" | "restaurant"
 
 # 대화 단계
-Phase = str  # "initial" | "slot_filling" | "routing" | "completed"
+Phase = str
 
 
 class SupervisorState(TypedDict, total=False):
     """슈퍼바이저 그래프 공유 상태."""
 
-    # 대화 히스토리 (초기 대화 + slot filling). 각 항목: {"role": "user"|"assistant", "content": str}
+    # 대화 히스토리 (초기 대화 + HITL + slot filling)
     messages: list[dict[str, str]]
-    # 사용자가 필요로 하는 슬롯 목록 (예: ["weather", "hotel", "flight"] 또는 + "restaurant")
+    # 최종 서브 에이전트 슬롯 (weather, hotel, flight, restaurant)
     slots: list[str]
-    # 슬롯별로 채워진 값 (예: destination, dates, hotel_preference 등)
+    # 의도분류·HITL 확정 전 제안 목록
+    proposed_slots: list[str]
+    # 슬롯 값 (destination 필수, 기타 도메인별 필드)
     slot_values: dict[str, str]
-    # 현재 단계
     current_phase: Phase
-    # 서브 에이전트별 결과 (slot 이름 -> 결과 문자열)
     sub_results: dict[str, str]
+    # 여행지 없을 때 ask_destination 루프 횟수 (무한 루프 방지)
+    destination_loop_count: int
 
 
-# 서브그래프에서 사용할 최소 입력 상태 (래퍼에서 변환 시 사용)
 class SubgraphInput(TypedDict, total=False):
-    """서브그래프 노드에 넘길 때 사용하는 입력 형태 (목업)."""
+    """서브그래프 노드에 넘길 때 사용하는 입력 형태."""
 
     query: str
     destination: str
