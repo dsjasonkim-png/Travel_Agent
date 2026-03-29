@@ -15,7 +15,7 @@ class FlightSearchTool:
     """항공권 정보를 검색하고 검증하는 도구 클래스."""
     
     def __init__(self):
-        self.client = SerpApiClient(os.getenv("flight_serpapi_api_key"))
+        self.client = SerpApiClient(os.getenv("SERPAPI_API_KEY"))
         self.llm = get_llm()
 
     def _preprocess_intent(self, query: str) -> Dict[str, Any]:
