@@ -9,6 +9,7 @@ load_dotenv()
 
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+SERPAPI_API_KEY: str = os.getenv("SERPAPI_API_KEY", "")
 
 # LangGraph 스트리밍 로그 (.env에서 설정)
 TRAVEL_AGENT_LOG_LEVEL: str = os.getenv("TRAVEL_AGENT_LOG_LEVEL", "INFO")
