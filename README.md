@@ -9,7 +9,8 @@ LangGraph 기반 여행 상담 데모입니다. 현재 구현은 하나의 super
 - 서브 에이전트 실행 순서는 고정입니다: `weather -> hotel -> flight -> restaurant`
 - 항공은 SerpApi Google Flights 실조회 경로가 연결되어 있습니다.
 - 날씨는 OpenWeather 실조회 경로가 연결되어 있습니다.
-- 호텔과 맛집은 현재 더미 추천 데이터를 사용합니다.
+- 호텔은 `SERPAPI_API_KEY`가 있으면 실 API를 사용하고, 없으면 더미 추천으로 fallback 합니다.
+- 맛집은 현재 더미 추천 데이터를 사용합니다.
 - `flight` 단계에서 출발지가 없으면 그 시점에만 HITL로 추가 질문합니다.
 - 로그는 `travel_agent.langgraph` 스트림 로그만 기본 출력되도록 정리되어 있습니다.
 
@@ -31,7 +32,7 @@ LangGraph 기반 여행 상담 데모입니다. 현재 구현은 하나의 super
 | 도메인 | 현재 구현 | 비고 |
 |---|---|---|
 | `weather` | 실 API + LLM 요약 | OpenWeather + OpenAI |
-| `hotel` | 더미 데이터 | 지역별 샘플 숙소 목록 |
+| `hotel` | 조건부 실 API | `SERPAPI_API_KEY`가 있으면 SerpApi Hotels, 없으면 더미 데이터 |
 | `flight` | 실 API | SerpApi Google Flights |
 | `restaurant` | 더미 데이터 | 지역별 샘플 맛집 목록 |
 
@@ -176,8 +177,8 @@ flowchart TD
 
 동작:
 
-- 현재는 지역별 샘플 숙소 목록을 반환합니다.
-- API 연동은 아직 없습니다.
+- `SERPAPI_API_KEY`가 있으면 SerpApi Hotels 결과를 반환합니다.
+- 키가 없으면 지역별 샘플 숙소 목록으로 fallback 합니다.
 
 ### Restaurant
 
@@ -223,7 +224,8 @@ uv sync
 | `OPENAI_API_KEY` | OpenAI API 키 |
 | `OPENAI_MODEL` | 기본 모델, 현재 기본값은 `gpt-4o-mini` |
 | `OPENWEATHER_API_KEY` | OpenWeather API 키 |
-| `flight_serpapi_api_key` | SerpApi Google Flights API 키 |
+| `SERPAPI_API_KEY` | SerpApi 공용 API 키 (hotel/flight 공용 가능) |
+| `flight_serpapi_api_key` | 항공 경로 하위 호환용 SerpApi API 키 |
 | `TRAVEL_AGENT_LOG_LEVEL` | 루트 로그 레벨, 기본 `WARNING` |
 | `TRAVEL_AGENT_LANGGRAPH_LOG_LEVEL` | LangGraph stream 로그 레벨, 기본 `INFO` |
 | `TRAVEL_AGENT_LOG_PREVIEW` | 로그 미리보기 길이, 기본 `240` |
@@ -314,7 +316,8 @@ uv run python -m unittest tests.test_graph_stream tests.test_service_flow tests.
 
 ## 현재 제한 사항
 
-- `hotel`, `restaurant`는 아직 실 API가 아닙니다.
+- `hotel`은 `SERPAPI_API_KEY`가 있으면 실 API를 사용하고, 없으면 더미 데이터로 fallback 합니다.
+- `restaurant`는 아직 실 API가 아닙니다.
 - `weather`는 코드 경로는 실 API지만, 실제 `.env` 키가 유효해야만 정상 응답합니다.
 - `flight` 위치 변환은 하드코딩 alias + LLM fallback 구조라서, 완전한 공항 검색 엔진은 아닙니다.
 - `supervisor/graph.py`는 저장소에 남아 있지만 현재 앱 실행 경로에는 사용되지 않습니다.
