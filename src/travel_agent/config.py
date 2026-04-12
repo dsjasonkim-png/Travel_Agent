@@ -2,44 +2,57 @@
 
 import logging
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(_PROJECT_ROOT / ".env")
 
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+OPENWEATHER_API_KEY: str = os.getenv("OPENWEATHER_API_KEY", "")
+FLIGHT_SERPAPI_API_KEY: str = os.getenv(
+    "flight_serpapi_api_key",
+    os.getenv("FLIGHT_SERPAPI_API_KEY", ""),
+)
 
 # LangGraph 스트리밍 로그 (.env에서 설정)
-TRAVEL_AGENT_LOG_LEVEL: str = os.getenv("TRAVEL_AGENT_LOG_LEVEL", "INFO")
-TRAVEL_AGENT_LOG_PREVIEW: int = int(os.getenv("TRAVEL_AGENT_LOG_PREVIEW", "800"))
-# `graph_stream`의 [LG debug]/[LG values]는 DEBUG. 루트만 INFO면 터미널에 안 보이므로
-# 이 로거만 기본 DEBUG (다른 라이브러리는 루트 INFO로 조용히 유지).
+TRAVEL_AGENT_LOG_LEVEL: str = os.getenv("TRAVEL_AGENT_LOG_LEVEL", "WARNING")
+TRAVEL_AGENT_LOG_PREVIEW: int = int(os.getenv("TRAVEL_AGENT_LOG_PREVIEW", "240"))
 TRAVEL_AGENT_LANGGRAPH_LOG_LEVEL: str = os.getenv(
-    "TRAVEL_AGENT_LANGGRAPH_LOG_LEVEL", "DEBUG"
+    "TRAVEL_AGENT_LANGGRAPH_LOG_LEVEL", "INFO"
 )
 
 
+def _parse_log_level(level_name: str, default: int) -> int:
+    level = getattr(logging, level_name.upper(), None)
+    return level if isinstance(level, int) else default
+
+
 def configure_logging() -> None:
-    """루트 로거 포맷·레벨 설정. CLI·Gradio 진입 시 한 번 호출."""
-    level_name = TRAVEL_AGENT_LOG_LEVEL.upper()
-    level = getattr(logging, level_name, None)
-    if not isinstance(level, int):
-        level = logging.INFO
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s [%(name)s] %(levelname)s %(message)s",
-        force=True,
-    )
+    """기본 로그는 숨기고 LangGraph stream 로그만 보이도록 설정."""
+    root_level = _parse_log_level(TRAVEL_AGENT_LOG_LEVEL, logging.WARNING)
+    root_logger = logging.getLogger()
+    for handler in list(root_logger.handlers):
+        root_logger.removeHandler(handler)
+    root_logger.handlers.clear()
+    root_logger.setLevel(root_level)
+    root_logger.addHandler(logging.NullHandler())
 
     lg_name = "travel_agent.langgraph"
-    lg_level_name = TRAVEL_AGENT_LANGGRAPH_LOG_LEVEL.strip().upper() or "DEBUG"
-    lg_level = getattr(logging, lg_level_name, None)
-    if not isinstance(lg_level, int):
-        lg_level = logging.DEBUG
+    lg_level = _parse_log_level(TRAVEL_AGENT_LANGGRAPH_LOG_LEVEL.strip() or "INFO", logging.INFO)
     langgraph_logger = logging.getLogger(lg_name)
+    for handler in list(langgraph_logger.handlers):
+        langgraph_logger.removeHandler(handler)
+    handler = logging.StreamHandler()
+    handler.setLevel(lg_level)
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s %(message)s", datefmt="%H:%M:%S")
+    )
+    langgraph_logger.addHandler(handler)
     langgraph_logger.setLevel(lg_level)
-    langgraph_logger.propagate = True
+    langgraph_logger.propagate = False
 
 
 def get_llm():

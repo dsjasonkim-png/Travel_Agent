@@ -1,40 +1,31 @@
-import os
 import requests
-import json
 from datetime import datetime
 from langchain_core.tools import tool
+from travel_agent.config import OPENWEATHER_API_KEY
 
-# 환경 변수 로드 (이미 supervisor에서 수행되지만 여기에서도 안전을 위해 확인 가능)
-OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 GEOCODING_URL = "https://api.openweathermap.org/geo/1.0/direct"
 CURRENT_URL = "https://api.openweathermap.org/data/2.5/weather"
 FORECAST_URL = "https://api.openweathermap.org/data/2.5/forecast"
+REQUEST_TIMEOUT = 10
 
 def get_coordinates(city_name: str):
     """도시 이름을 위도/경도로 변환"""
-    print(f"[Debug] get_coordinates called with: {city_name}")
     if not OPENWEATHER_API_KEY:
-        print("[Debug] Error: OPENWEATHER_API_KEY is missing")
         return None, None, None
     
     params = {"q": city_name, "limit": 1, "appid": OPENWEATHER_API_KEY}
     try:
-        res = requests.get(GEOCODING_URL, params=params)
-        print(f"[Debug] Geocoding API response status: {res.status_code}")
+        res = requests.get(GEOCODING_URL, params=params, timeout=REQUEST_TIMEOUT)
         if res.status_code == 200 and res.json():
             data = res.json()[0]
-            print(f"[Debug] Geocoding success: {data.get('name')} ({data.get('lat')}, {data.get('lon')})")
             return data["lat"], data["lon"], data["name"]
-        else:
-            print(f"[Debug] Geocoding failed or empty: {res.text}")
-    except Exception as e:
-        print(f"[Debug] Geocoding Exception: {e}")
+    except Exception:
+        pass
     return None, None, None
 
 @tool
 def get_current_weather(location: str) -> str:
     """특정 지역의 현재 날씨(온도, 습도, 풍속 등)를 조회합니다."""
-    print(f"[Debug] get_current_weather tool called for: {location}")
     if not OPENWEATHER_API_KEY:
         return "OpenWeather API Key가 설정되지 않았습니다."
         
@@ -50,9 +41,9 @@ def get_current_weather(location: str) -> str:
         "lang": "kr"
     }
     try:
-        res = requests.get(CURRENT_URL, params=params)
+        res = requests.get(CURRENT_URL, params=params, timeout=REQUEST_TIMEOUT)
         if res.status_code != 200:
-            return f"API 호출 오류 (코트: {res.status_code})"
+            return f"API 호출 오류 (코드: {res.status_code})"
         data = res.json()
         
         main, w = data['main'], data['weather'][0]
@@ -78,7 +69,7 @@ def get_weather_forecast(location: str) -> str:
         "lang": "kr"
     }
     try:
-        res = requests.get(FORECAST_URL, params=params)
+        res = requests.get(FORECAST_URL, params=params, timeout=REQUEST_TIMEOUT)
         if res.status_code != 200:
             return f"API 호출 오류 (코드: {res.status_code})"
         data = res.json()

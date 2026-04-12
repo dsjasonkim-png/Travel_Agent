@@ -1,21 +1,16 @@
-import os
-import json
 from datetime import datetime
 from typing import Dict, Any
-from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.tools import tool
-from travel_agent.config import get_llm
+from travel_agent.config import FLIGHT_SERPAPI_API_KEY, get_llm
 from .flight_api_client import SerpApiClient
-
-load_dotenv()
 
 class FlightSearchTool:
     """항공권 정보를 검색하고 검증하는 도구 클래스."""
     
     def __init__(self):
-        self.client = SerpApiClient(os.getenv("flight_serpapi_api_key"))
+        self.client = SerpApiClient(FLIGHT_SERPAPI_API_KEY)
         self.llm = get_llm()
 
     def _preprocess_intent(self, query: str) -> Dict[str, Any]:

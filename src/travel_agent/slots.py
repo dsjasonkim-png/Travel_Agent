@@ -1,28 +1,38 @@
-"""슬롯 정의·동적 결정 로직 (목업). 사용자 목적에 따라 필요한 슬롯을 결정."""
+"""Slot and service helpers used by the beginner-friendly travel demo."""
 
-# 고정 슬롯 후보
-ALL_SLOTS = ["weather", "hotel", "flight", "restaurant"]
+SERVICE_ORDER = ["weather", "hotel", "flight", "restaurant"]
+ALL_SLOTS = list(SERVICE_ORDER)
 
-# 슬롯별 필요 필드 (slot_filling에서 참조). 목업용 최소 필드.
+REQUIRED_TRIP_FIELDS = ("destination", "start_date", "end_date")
 SLOT_FIELDS: dict[str, list[str]] = {
-    "weather": ["destination", "dates"],
-    "hotel": ["destination", "check_in", "check_out"],
-    "flight": ["origin", "destination", "dates"],
-    "restaurant": ["destination", "dates", "preference"],
+    "weather": ["destination", "start_date", "end_date"],
+    "hotel": ["destination", "start_date", "end_date"],
+    "flight": ["origin", "destination", "start_date", "end_date"],
+    "restaurant": ["destination", "start_date", "end_date"],
 }
 
 
-def get_active_slots(initial_message: str) -> list[str]:
-    """초기 사용자 메시지에 따라 활성 슬롯 목록 반환 (목업).
+def missing_trip_fields(slot_values: dict[str, str]) -> list[str]:
+    """Return required trip fields that are still missing."""
 
-    목업: "맛집 필요 없어", "맛집 제외" 등 키워드 포함 시 restaurant 제외.
-    그 외에는 기본 4개 슬롯 모두 포함.
-    """
-    msg_lower = (initial_message or "").strip().lower()
-    # "맛집은 필요 없어요" 등 조사 포함 문장도 매칭
-    skip_restaurant_keywords = ["맛집 필요 없", "맛집 제외", "맛집 스킵", "맛집 안 가", "restaurant skip", "no restaurant"]
-    if any(kw in msg_lower for kw in skip_restaurant_keywords):
-        return [s for s in ALL_SLOTS if s != "restaurant"]
-    if "맛집" in msg_lower and ("필요 없" in msg_lower or "제외" in msg_lower or "스킵" in msg_lower):
-        return [s for s in ALL_SLOTS if s != "restaurant"]
-    return list(ALL_SLOTS)
+    return [field for field in REQUIRED_TRIP_FIELDS if not (slot_values.get(field) or "").strip()]
+
+
+def format_trip_period(slot_values: dict[str, str]) -> str:
+    """Format the selected trip period for user-facing output."""
+
+    start = (slot_values.get("start_date") or "").strip()
+    end = (slot_values.get("end_date") or "").strip()
+
+    if start and end:
+        return f"{start} ~ {end}"
+    if start:
+        return start
+    return "일정 미정"
+
+
+def get_departure_city(slot_values: dict[str, str], default: str = "서울") -> str:
+    """Return the departure city or a simple default for the flight demo."""
+
+    origin = (slot_values.get("origin") or "").strip()
+    return origin or default

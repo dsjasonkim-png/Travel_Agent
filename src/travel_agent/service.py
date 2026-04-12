@@ -8,7 +8,7 @@ from typing import Any
 from langgraph.types import Command
 
 from travel_agent.graph_stream import run_with_stream_logging
-from travel_agent.supervisor.graph import get_supervisor_graph
+from travel_agent.supervisor import get_supervisor_graph
 
 
 def run_agent_turn(
