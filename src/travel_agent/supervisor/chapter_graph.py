@@ -58,13 +58,15 @@ def _extract_trip_details(
   "destination": "",
   "start_date": "",
   "end_date": "",
-  "origin": ""
+  "origin": "",
+  "travel_context": ""
 }}
 
 규칙:
 - destination: 여행지 도시/지역명
 - start_date, end_date: 정확히 알 수 있을 때만 YYYY-MM-DD
 - origin: 출발지가 명시된 경우만 채우기
+- travel_context: 여행 동반자나 목적/상황 (예: 신혼부부, 커플, 부모님, 가족, 혼자 등)
 - 알 수 없으면 빈 문자열
 - 이미 채워진 값이 있으면 그 값을 유지하고, 새 정보가 더 명확할 때만 보완
 
@@ -76,7 +78,7 @@ def _extract_trip_details(
 """.strip()
 
     data = parse_json_object(invoke_text(prompt)) or {}
-    for field in ("destination", "start_date", "end_date", "origin"):
+    for field in ("destination", "start_date", "end_date", "origin", "travel_context"):
         value = str(data.get(field, "") or "").strip()
         if value:
             slot_values[field] = value

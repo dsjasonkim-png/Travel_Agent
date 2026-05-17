@@ -394,6 +394,22 @@ _ORIGIN_PATTERNS = [
     re.compile(r"from\s+([A-Za-z][A-Za-z\s]+)", re.IGNORECASE),
 ]
 
+def _extract_persona(text: str) -> str:
+    """LLM으로 사용자 메시지에서 여행 동반자/상황 정보를 동적으로 추출."""
+    import logging as _log
+    _logger = _log.getLogger(__name__)
+    prompt = (
+        "다음 사용자 메시지에서 여행 동반자 또는 여행 상황 키워드(예: 신혼부부, 커플, 부모님, 친구, 혼자 등)를 추출하세요.\n"
+        "있으면 해당 표현만 짧게 그대로 출력하고, 없으면 빈 문자열만 출력하세요.\n"
+        "JSON이나 부가 설명 없이 추출된 표현 하나만 출력하세요.\n\n"
+        f"사용자 메시지: {text}"
+    )
+    result = invoke_text(prompt).strip()
+    _logger.warning(f"[PERSONA DEBUG] input={text!r}  llm_result={result!r}")
+    if result.lower() in ("없음", "없습니다", "none", "n/a", ""):
+        return ""
+    return result
+
 _SUB_AGENTS = {
     "weather": invoke_weather_agent,
     "hotel": invoke_hotel_agent,
@@ -475,6 +491,11 @@ def _extract_trip_details(
             if start_date and end_date:
                 slot_values["start_date"] = start_date
                 slot_values["end_date"] = end_date
+
+        if not slot_values.get("travel_context"):
+            persona = _extract_persona(content)
+            if persona:
+                slot_values["travel_context"] = persona
 
     return slot_values
 

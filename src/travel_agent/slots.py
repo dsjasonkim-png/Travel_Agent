@@ -8,7 +8,7 @@ SLOT_FIELDS: dict[str, list[str]] = {
     "weather": ["destination", "start_date", "end_date"],
     "hotel": ["destination", "start_date", "end_date"],
     "flight": ["origin", "destination", "start_date", "end_date"],
-    "restaurant": ["destination", "start_date", "end_date"],
+    "restaurant": ["destination", "start_date", "end_date", "travel_context"],
 }
 
 
